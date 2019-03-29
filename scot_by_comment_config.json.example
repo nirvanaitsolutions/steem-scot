@@ -1,0 +1,14 @@
+{
+        "scot_account": "scot_account",
+        "scot_token": "SCOT",
+        "token_memo":"Here is your token thanks to %s",
+        "wallet_password": "wallet_password",
+        "no_broadcast": false,
+        "min_staked_token": 10,
+        "send_token_amount": 1,
+        "sucess_reply_body": "Dear %s, The DRAGON is on its way!",
+        "fail_reply_body": "You need to stake 10 dragon, in order to use this service.",
+        "comment_command": "!DRAGON",
+        "wallet_password": "wallet_password"
+        
+}

@@ -2,12 +2,12 @@
         "scot_account": "scot_account",
         "scot_token": "SCOT",
         "token_memo":"Daily token share, please visit ... for more information.",
+        "wallet_password": "wallet_password",
+        "no_broadcast": false,
         "yearly_inflation": 10000,
         "included_apps": [],
         "include_token_as_tag": false,
         "include_all_posts":true,
         "downvotes":false,
-        "upvotes":true,
-        "wallet_password": "wallet_password",
-        "no_broadcast": false
+        "upvotes":true
 }
