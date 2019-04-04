@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='steem-scot',
-    version='0.2.0',
+    version='0.2.1',
     packages=["scot",],
     url='http://github.com/holgern/steem-scot',
     license='MIT',

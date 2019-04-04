@@ -1,14 +1,30 @@
 {
-        "scot_account": "scot_account",
+        "config": [{
+        "scot_account": "scotaccount",
         "scot_token": "SCOT",
         "token_memo":"Here is your token thanks to %s",
-        "wallet_password": "wallet_password",
+        "reply": true,
+        "sucess_reply_body": "Dear %s, The token are on its way!",
+        "fail_reply_body": "You need to stake 10 token, in order to use this service.",
+        "no_token_left_body": "Please retry later...",
+        "comment_command": "!SCOT",
+        "user_can_specify_amount": true,
+        "maximum_amount": 10,
+        "min_staked_token": 50
+        },
+        {
+        "scot_account": "token_issuer",
+        "scot_token": "TOKEN",
+        "token_memo":"You got a token",
+        "reply": true,
+        "sucess_reply_body": "Here is your token",
+        "fail_reply_body": "Sorry, you need more token in order to use this service.",
+        "no_token_left_body": "Sorry, out of token, please retry later...",
+        "comment_command": "!TOKEN",
+        "user_can_specify_amount": false,
+        "maximum_amount": 1,
+        "min_staked_token": 10
+        }],
         "no_broadcast": false,
-        "min_staked_token": 10,
-        "send_token_amount": 1,
-        "sucess_reply_body": "Dear %s, The DRAGON is on its way!",
-        "fail_reply_body": "You need to stake 10 dragon, in order to use this service.",
-        "comment_command": "!DRAGON",
-        "wallet_password": "wallet_password"
-        
+        "wallet_password": "walletpass"
 }
