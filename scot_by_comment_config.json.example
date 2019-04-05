@@ -28,5 +28,6 @@
         "usage_upvote_percentage": 0
         }],
         "no_broadcast": false,
+        "print_log_at_block": 300,
         "wallet_password": "walletpass"
 }

@@ -30,6 +30,9 @@ class Scot_by_comment:
         if not self.config["no_broadcast"]:
             self.stm.wallet.unlock(self.config["wallet_password"])
         self.token_config = {}
+        # add log stats
+        self.log_data = {"start_time": 0, "last_block_num": None, "new_commands": 0, "stop_block_num": 0,
+                         "stop_block_num": 0, "time_for_blocks": 0} 
         config_cnt = 0
         necessary_fields = ["scot_account", "scot_token", "min_staked_token", "comment_command",
                             "token_memo", "reply", "sucess_reply_body", "fail_reply_body", "no_token_left_body",
@@ -59,13 +62,12 @@ class Scot_by_comment:
     def run(self, start_block):
         
         stop_block = self.blockchain.get_current_block_num()
-        if stop_block % 20 == 0:
-            logger.info("current block %d" % (stop_block))
+
         if start_block is not None:
             last_block_num = start_block - 1
-        cnt = 0
+        self.log_data["start_block_num"] = start_block
         for op in self.blockchain.stream(start=start_block, stop=stop_block, opNames=["comment"],  max_batch_size=50):
-            cnt += 1
+            self.print_block_log(op)
             last_block_num = op["block_num"]
             
             if op["type"] == "comment":
@@ -118,7 +120,7 @@ class Scot_by_comment:
                         except:
                             logger.info("Could not parse amount")
                     
-    
+                self.log_data["new_commands"] += 1
                 wallet = Wallet(c_comment["author"], steem_instance=self.stm)
                 token_in_wallet = wallet.get_token(self.token_config[token]["scot_token"])
                 if token_in_wallet is None or float(token_in_wallet["balance"]) < self.token_config[token]["min_staked_token"]:
@@ -153,15 +155,50 @@ class Scot_by_comment:
                     except:
                         logger.warn("Could not reply to post")
                         continue
-                    if self.token_config["usage_upvote_percentage"] > 0:
+                    if self.token_config[token]["usage_upvote_percentage"] > 0:
                         try:
-                            c_comment.upvote(self.token_config["usage_upvote_percentage"], voter=self.token_config[token]["scot_account"])
+                            c_comment.upvote(self.token_config[token]["usage_upvote_percentage"], voter=self.token_config[token]["scot_account"])
                         except:
                             logger.warn("Could not upvote comment")
                             
                 time.sleep(4)
         return last_block_num
+
+    def print_block_log(self, op):
+        # Use variables for all dict elements for better code readability
+        start_time = self.log_data["start_time"]
+        last_block_num = self.log_data["last_block_num"]
+        new_commands = self.log_data["new_commands"]
+        start_block_num = self.log_data["start_block_num"]
+        stop_block_num = self.log_data["stop_block_num"]
+        time_for_blocks = self.log_data["time_for_blocks"]
+        print_log_at_block = self.config["print_log_at_block"]
         
+        if last_block_num is None:
+            start_time = time.time()
+            last_block_num = op["block_num"]
+            new_commands = 0
+        if (op["block_num"] - last_block_num) > print_log_at_block:
+            time_for_blocks = time.time() - start_time
+            logger.info("---------------------")
+            # print extended log when block log difference is greater than 200
+            if print_log_at_block > 200 and (stop_block_num - start_block_num) > 0:
+                percentage_done = (op["block_num"] - start_block_num) / (stop_block_num - start_block_num) * 100
+                logger.info("Block %d -- Datetime %s -- %.2f %% finished" % (op["block_num"], op["timestamp"], percentage_done))
+                running_hours = (stop_block_num - op["block_num"]) * time_for_blocks / print_log_at_block / 60 / 60
+                logger.info("Duration for %d blocks: %.2f s (%.3f s per block) -- %.2f hours to go" % (print_log_at_block, time_for_blocks, time_for_blocks / print_log_at_block, running_hours))
+            else:
+                logger.info("Block %d -- Datetime %s" % (op["block_num"], op["timestamp"]))
+            logger.info("%d  new scot commands" % new_commands)
+            start_time = time.time()
+            new_commands = 0
+            last_block_num = op["block_num"]
+        self.log_data["start_time"] = start_time
+        self.log_data["last_block_num"] = last_block_num
+        self.log_data["new_commands"] = new_commands
+        self.log_data["time_for_blocks"] = time_for_blocks
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config file in JSON format")
