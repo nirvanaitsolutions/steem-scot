@@ -9,6 +9,7 @@ from beem.exceptions import ContentDoesNotExistsException
 from beem.utils import addTzInfo, resolve_authorperm, construct_authorperm, derive_permlink, formatTimeString
 from datetime import datetime, timedelta
 from steemengine.wallet import Wallet
+from steemengine.tokens import Tokens
 import time
 import shelve
 import json
@@ -25,13 +26,34 @@ class Scot_by_comment:
     def __init__(self, config, steemd_instance):
         self.config = config
         self.stm = steemd_instance
-        
+        token_list = Tokens()
         if not self.config["no_broadcast"]:
             self.stm.wallet.unlock(self.config["wallet_password"])
         self.token_config = {}
+        config_cnt = 0
+        necessary_fields = ["scot_account", "scot_token", "min_staked_token", "comment_command",
+                            "token_memo", "reply", "sucess_reply_body", "fail_reply_body", "no_token_left_body",
+                            "user_can_specify_amount", "maximum_amount", "usage_upvote_percentage"]
         for conf in self.config["config"]:
+            config_cnt += 1
+            # check if all fields are set
+            all_fields_ok = True
+            for field in necessary_fields:
+                if field not in conf:
+                    logger.warn("Error in %d. config: %s missing" % (config_cnt, field))
+                    all_fields_ok = False
+            if not all_fields_ok:
+                continue
+            # Check if scot_account exists (exception will be raised when not)
+            Account(conf["scot_account"])
+            # Check if scot_token exists
+            if token_list.get_token(conf["scot_token"]) is None:
+                logger.warn("Token %s does not exists" % conf["scot_token"])
+                continue
             self.token_config[conf["scot_token"]] = conf
-            
+        if len(self.token_config) == 0:
+            raise Exception("Broken config, shutdown bot...")
+        logger.info("%d configs were found." % len(self.token_config))
         self.blockchain = Blockchain(mode='head', steem_instance=self.stm)
         
     def run(self, start_block):
@@ -77,7 +99,7 @@ class Scot_by_comment:
                 # Load scot token balance
                 scot_wallet = Wallet(self.token_config[token]["scot_account"], steem_instance=self.stm)
                 scot_token = scot_wallet.get_token(self.token_config[token]["scot_token"])
-    
+
                 # parse amount when user_can_specify_amount is true
                 amount = self.token_config[token]["maximum_amount"]
                 if self.token_config[token]["user_can_specify_amount"]:
@@ -115,14 +137,28 @@ class Scot_by_comment:
                     else:
                         token_memo = self.token_config[token]["token_memo"]
                     sendwallet = Wallet(self.token_config[token]["scot_account"], steem_instance=self.stm)
-                    print("Sending %.2f %s to %s" % (amount, self.token_config[token]["scot_token"], c_comment["parent_author"]))
-                    sendwallet.transfer(c_comment["parent_author"], amount, self.token_config[token]["scot_token"], token_memo)
-
-                reply_identifier = c_comment["authorperm"]
+                    try:
+                        logger.info("Sending %.2f %s to %s" % (amount, self.token_config[token]["scot_token"], c_comment["parent_author"]))
+                        sendwallet.transfer(c_comment["parent_author"], amount, self.token_config[token]["scot_token"], token_memo)
+                    except:
+                        logger.warn("Could not send amount")
+                        continue
+                        
+                reply_identifier = construct_authorperm(c_comment["parent_author"], c_comment["parent_permlink"])
                 if self.config["no_broadcast"]:
                     logger.info("%s" % reply_body)
                 else:
-                    self.stm.post("", reply_body, author=self.token_config[token]["scot_account"], reply_identifier=reply_identifier)
+                    try:
+                        self.stm.post("", reply_body, author=self.token_config[token]["scot_account"], reply_identifier=reply_identifier)
+                    except:
+                        logger.warn("Could not reply to post")
+                        continue
+                    if self.token_config["usage_upvote_percentage"] > 0:
+                        try:
+                            c_comment.upvote(self.token_config["usage_upvote_percentage"], voter=self.token_config[token]["scot_account"])
+                        except:
+                            logger.warn("Could not upvote comment")
+                            
                 time.sleep(4)
         return last_block_num
         
