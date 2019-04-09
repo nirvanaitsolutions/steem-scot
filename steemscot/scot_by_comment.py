@@ -28,9 +28,8 @@ class Scot_by_comment:
     def __init__(self, config, steemd_instance):
         self.config = config
         self.stm = steemd_instance
-        token_list = Tokens()
-        if not self.config["no_broadcast"]:
-            self.stm.wallet.unlock(self.config["wallet_password"])
+        
+
         self.token_config = {}
         # add log stats
         self.log_data = {"start_time": 0, "last_block_num": None, "new_commands": 0, "stop_block_num": 0,
@@ -106,7 +105,10 @@ class Scot_by_comment:
                             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                             logger.warn("%s - %s - %s" % (str(exc_type), str(fname), str(exc_tb.tb_lineno)))                        
                             logger.info("Could not parse amount")
-                    
+                
+                if not self.config["no_broadcast"] and self.stm.wallet.locked():
+                    self.stm.wallet.unlock(self.config["wallet_password"])                
+                
                 self.log_data["new_commands"] += 1
                 wallet = Wallet(c_comment["author"], steem_instance=self.stm)
                 token_in_wallet = wallet.get_token(self.token_config[token]["scot_token"])
