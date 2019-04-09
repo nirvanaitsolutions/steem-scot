@@ -16,6 +16,8 @@ import json
 import logging
 import argparse
 import os
+import sys
+from steemscot.utils import print_block_log,check_config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,26 +39,8 @@ class Scot_by_comment:
         necessary_fields = ["scot_account", "scot_token", "min_staked_token", "comment_command",
                             "token_memo", "reply", "sucess_reply_body", "fail_reply_body", "no_token_left_body",
                             "user_can_specify_amount", "maximum_amount", "usage_upvote_percentage"]
-        for conf in self.config["config"]:
-            config_cnt += 1
-            # check if all fields are set
-            all_fields_ok = True
-            for field in necessary_fields:
-                if field not in conf:
-                    logger.warn("Error in %d. config: %s missing" % (config_cnt, field))
-                    all_fields_ok = False
-            if not all_fields_ok:
-                continue
-            # Check if scot_account exists (exception will be raised when not)
-            Account(conf["scot_account"])
-            # Check if scot_token exists
-            if token_list.get_token(conf["scot_token"]) is None:
-                logger.warn("Token %s does not exists" % conf["scot_token"])
-                continue
-            self.token_config[conf["scot_token"]] = conf
-        if len(self.token_config) == 0:
-            raise Exception("Broken config, shutdown bot...")
-        logger.info("%d configs were found." % len(self.token_config))
+        self.token_config = check_config(self.config["config"], necessary_fields, self.stm)
+
         self.blockchain = Blockchain(mode='head', steem_instance=self.stm)
         
     def run(self, start_block):
@@ -67,7 +51,7 @@ class Scot_by_comment:
             last_block_num = start_block - 1
         self.log_data["start_block_num"] = start_block
         for op in self.blockchain.stream(start=start_block, stop=stop_block, opNames=["comment"],  max_batch_size=50):
-            self.print_block_log(op)
+            self.log_data = print_block_log(self.log_data, op, self.config["print_log_at_block"])
             last_block_num = op["block_num"]
             
             if op["type"] == "comment":
@@ -117,7 +101,10 @@ class Scot_by_comment:
                     if len(command_args) > 0:
                         try:
                             amount = float(command_args[0])
-                        except:
+                        except Exception as e:
+                            exc_type, exc_obj, exc_tb = sys.exc_info()
+                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                            logger.warn("%s - %s - %s" % (str(exc_type), str(fname), str(exc_tb.tb_lineno)))                        
                             logger.info("Could not parse amount")
                     
                 self.log_data["new_commands"] += 1
@@ -142,8 +129,11 @@ class Scot_by_comment:
                     try:
                         logger.info("Sending %.2f %s to %s" % (amount, self.token_config[token]["scot_token"], c_comment["parent_author"]))
                         sendwallet.transfer(c_comment["parent_author"], amount, self.token_config[token]["scot_token"], token_memo)
-                    except:
-                        logger.warn("Could not send amount")
+                    except Exception as e:
+                        exc_type, exc_obj, exc_tb = sys.exc_info()
+                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                        logger.warn("%s - %s - %s" % (str(exc_type), str(fname), str(exc_tb.tb_lineno)))                     
+                        logger.warn("Could not send %s token" % self.token_config[token]["scot_token"])
                         continue
                         
                 reply_identifier = construct_authorperm(c_comment["parent_author"], c_comment["parent_permlink"])
@@ -152,51 +142,23 @@ class Scot_by_comment:
                 else:
                     try:
                         self.stm.post("", reply_body, author=self.token_config[token]["scot_account"], reply_identifier=reply_identifier)
-                    except:
+                    except Exception as e:
+                        exc_type, exc_obj, exc_tb = sys.exc_info()
+                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                        logger.warn("%s - %s - %s" % (str(exc_type), str(fname), str(exc_tb.tb_lineno)))                     
                         logger.warn("Could not reply to post")
                         continue
                     if self.token_config[token]["usage_upvote_percentage"] > 0:
                         try:
                             c_comment.upvote(self.token_config[token]["usage_upvote_percentage"], voter=self.token_config[token]["scot_account"])
-                        except:
+                        except Exception as e:
+                            exc_type, exc_obj, exc_tb = sys.exc_info()
+                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                            logger.warn("%s - %s - %s" % (str(exc_type), str(fname), str(exc_tb.tb_lineno)))                        
                             logger.warn("Could not upvote comment")
                             
                 time.sleep(4)
         return last_block_num
-
-    def print_block_log(self, op):
-        # Use variables for all dict elements for better code readability
-        start_time = self.log_data["start_time"]
-        last_block_num = self.log_data["last_block_num"]
-        new_commands = self.log_data["new_commands"]
-        start_block_num = self.log_data["start_block_num"]
-        stop_block_num = self.log_data["stop_block_num"]
-        time_for_blocks = self.log_data["time_for_blocks"]
-        print_log_at_block = self.config["print_log_at_block"]
-        
-        if last_block_num is None:
-            start_time = time.time()
-            last_block_num = op["block_num"]
-            new_commands = 0
-        if (op["block_num"] - last_block_num) > print_log_at_block:
-            time_for_blocks = time.time() - start_time
-            logger.info("---------------------")
-            # print extended log when block log difference is greater than 200
-            if print_log_at_block > 200 and (stop_block_num - start_block_num) > 0:
-                percentage_done = (op["block_num"] - start_block_num) / (stop_block_num - start_block_num) * 100
-                logger.info("Block %d -- Datetime %s -- %.2f %% finished" % (op["block_num"], op["timestamp"], percentage_done))
-                running_hours = (stop_block_num - op["block_num"]) * time_for_blocks / print_log_at_block / 60 / 60
-                logger.info("Duration for %d blocks: %.2f s (%.3f s per block) -- %.2f hours to go" % (print_log_at_block, time_for_blocks, time_for_blocks / print_log_at_block, running_hours))
-            else:
-                logger.info("Block %d -- Datetime %s" % (op["block_num"], op["timestamp"]))
-            logger.info("%d  new scot commands" % new_commands)
-            start_time = time.time()
-            new_commands = 0
-            last_block_num = op["block_num"]
-        self.log_data["start_time"] = start_time
-        self.log_data["last_block_num"] = last_block_num
-        self.log_data["new_commands"] = new_commands
-        self.log_data["time_for_blocks"] = time_for_blocks
 
 
 def main():
@@ -204,6 +166,7 @@ def main():
     parser.add_argument("config", help="Config file in JSON format")
     parser.add_argument("--datadir", help="Data storage dir", default='.')
     args = parser.parse_args()
+    logger.info("Loading config: %s" % str(args.config))
     config = json.loads(open(args.config).read())
     datadir = args.datadir
 

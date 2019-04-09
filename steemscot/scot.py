@@ -13,6 +13,7 @@ from steemengine.tokenobject import Token
 from steemengine.wallet import Wallet
 import time
 import json
+import shelve
 import math
 import argparse
 import logging
