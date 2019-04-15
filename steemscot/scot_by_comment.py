@@ -14,14 +14,29 @@ import time
 import shelve
 import json
 import logging
+import logging.config
 import argparse
 import os
 import sys
 from steemscot.utils import print_block_log,check_config
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logging.basicConfig()
+
+
+def setup_logging(
+    default_path='logging.json',
+    default_level=logging.INFO
+):
+    """Setup logging configuration
+
+    """
+    path = default_path
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            config = json.load(f)
+        logging.config.dictConfig(config)
+    else:
+        logging.basicConfig(level=default_level)
 
 
 class Scot_by_comment:
@@ -41,9 +56,11 @@ class Scot_by_comment:
         self.token_config = check_config(self.config["config"], necessary_fields, self.stm)
 
         self.blockchain = Blockchain(mode='head', steem_instance=self.stm)
-        
+    
+
     def run(self, start_block):
-        
+        self.stm.wallet.unlock(self.config["wallet_password"])  
+        self.blockchain = Blockchain(mode='head', steem_instance=self.stm)
         stop_block = self.blockchain.get_current_block_num()
 
         if start_block is not None:
@@ -127,7 +144,9 @@ class Scot_by_comment:
                         token_memo = self.token_config[token]["token_memo"] % c_comment["author"]
                     else:
                         token_memo = self.token_config[token]["token_memo"]
+                        
                     sendwallet = Wallet(self.token_config[token]["scot_account"], steem_instance=self.stm)
+
                     try:
                         logger.info("Sending %.2f %s to %s" % (amount, self.token_config[token]["scot_token"], c_comment["parent_author"]))
                         sendwallet.transfer(c_comment["parent_author"], amount, self.token_config[token]["scot_token"], token_memo)
@@ -166,8 +185,12 @@ class Scot_by_comment:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config file in JSON format")
+    parser.add_argument("--logconfig", help="Logger Config file in JSON format", default='logger.json')
     parser.add_argument("--datadir", help="Data storage dir", default='.')
     args = parser.parse_args()
+    
+    setup_logging(default_path=args.logconfig)
+    
     logger.info("Loading config: %s" % str(args.config))
     config = json.loads(open(args.config).read())
     datadir = args.datadir
@@ -208,6 +231,7 @@ def main():
         elif last_block_num - block_counter > 20 * 60 * 24:
             nodelist.update_nodes()
             stm = Steem(node=nodelist.get_nodes(), num_retries=5, call_num_retries=3, timeout=15)
+            
             scot.stm = stm
 
         start_block = last_block_num + 1
